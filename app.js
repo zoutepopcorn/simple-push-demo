@@ -126,6 +126,7 @@ serverController.expressApp.post('/register_web_push', function(req, res) {
 });
 
 function sendPureAndroidNotifications(myFirebaseRef) {
+  console.log('sendPureAndroidNotifications');
   return new Promise(function(resolve, reject) {
     var androidChildRef = myFirebaseRef.child('android');
     androidChildRef.once('value', function(dataSnapshot) {
@@ -176,6 +177,7 @@ function sendPureAndroidNotifications(myFirebaseRef) {
 }
 
 function sendWebNotifications(myFirebaseRef) {
+  console.log('sendWebNotifications');
   return new Promise(function(resolve, reject) {
     var duplicationsRef = myFirebaseRef.child('duplications');
     var webChildRef = myFirebaseRef.child('web');
