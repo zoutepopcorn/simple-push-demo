@@ -130,6 +130,7 @@ function sendPureAndroidNotifications(myFirebaseRef) {
     var androidChildRef = myFirebaseRef.child('android');
     androidChildRef.once('value', function(dataSnapshot) {
       if (!dataSnapshot.exists()) {
+        resolve();
         return;
       }
 
@@ -180,7 +181,7 @@ function sendWebNotifications(myFirebaseRef) {
     var webChildRef = myFirebaseRef.child('web');
     webChildRef.once('value', function(dataSnapshot) {
       if (!dataSnapshot.exists()) {
-        console.log('No Web Data');
+        resolve();
         return;
       }
 
