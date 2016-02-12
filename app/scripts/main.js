@@ -19,18 +19,9 @@
  *
  */
 
-import PushClient from './push-client.es6.js';
-
-var API_KEY = 'AIzaSyBBh4ddPa96rQQNxqiq_qQj7sq1JdsNQUQ';
-
-// Define a different server URL here if desire.
-var PUSH_SERVER_URL = '';
-
+import PushClient from './push-client.js';
 
 function updateUIForPush(pushToggleSwitch) {
-  // This div contains the UI for CURL commands to trigger a push
-  var sendPushOptions = document.querySelector('.js-send-push-options');
-
   var stateChangeListener = function(state, data) {
     // console.log(state);
     if (typeof(state.interactive) !== 'undefined') {
@@ -64,91 +55,67 @@ function updateUIForPush(pushToggleSwitch) {
 
   var subscriptionUpdate = (subscription) => {
     console.log('subscriptionUpdate: ', subscription);
+    var sendPushOptions = document.querySelector('.js-send-push-options');
     if (!subscription) {
       // Remove any subscription from your servers if you have
       // set it up.
-
       sendPushOptions.style.opacity = 0;
       return;
     }
 
-    // We should figure the GCM curl command
-    var produceGCMProprietaryCURLCommand = function() {
-      var curlEndpoint = 'https://android.googleapis.com/gcm/send';
-      var endpointSections = subscription.endpoint.split('/');
-      var subscriptionId = endpointSections[endpointSections.length - 1];
-      var curlCommand = 'curl --header "Authorization: key=' +
-        API_KEY + '" --header Content-Type:"application/json" ' +
-        curlEndpoint + ' -d "{\\"registration_ids\\":[\\"' +
-        subscriptionId + '\\"]}"';
-      return curlCommand;
-    };
-
     var isChromeForAndroid = function() {
-      var regex = /.*Android \d\.\d;.*Chrome\/\d+\.\d+\.\d+\.\d+.*/g;
+      var regex = /.*Android \d+\.\d+(\.\d+)?;.*Chrome\/\d+\.\d+\.\d+\.\d+.*/g;
       return (regex.exec(navigator.userAgent) !== null);
     };
 
-    var produceWebPushProtocolCURLCommand = function() {
-      var curlEndpoint = subscription.endpoint;
-      var curlCommand = 'curl --request POST ' + curlEndpoint;
-      return curlCommand;
-    };
+    // Register new subscription
+    fetch('/register_web_push', {
+      method: 'post',
+      headers: {
+        'Content-type': 'application/json'
+      },
+      body: JSON.stringify(subscription)
+    })
+    .then(function(response) {
+      return response.json();
+    })
+    .then(function(responseObj) {
+      if (!responseObj.success) {
+        return;
+      }
 
-    var curlCommand;
-    var intenLink = document.querySelector('.js-intent-button');
-    if (subscription.endpoint.indexOf(
-      'https://android.googleapis.com/gcm/send') === 0) {
-      if (isChromeForAndroid()) {
-        intenLink.style.display = 'inline-block';
-        var appPackage = 'com.gauntface.push.dedupe';
-        var fallbackUrl = encodeURIComponent(
-          window.location.href + '?dedupeCheck=true');
-        var endpointSections = subscription.endpoint.split('/');
-        var subscriptionId = endpointSections[endpointSections.length - 1];
-        intenLink.href = `intent:#Intent;package=${appPackage};` +
-            `S.browser_fallback_url=${fallbackUrl};` +
-            `type=text/plain;S.com.gauntface.push.dedupe.intent.extra.REG_ID` +
-            `=${subscriptionId};end`;
+      var internalId = responseObj.internalId;
+
+      var intenLink = document.querySelector('.js-intent-button');
+      if (subscription.endpoint.indexOf(
+        'https://android.googleapis.com/gcm/send') === 0) {
+        if (isChromeForAndroid()) {
+          var appPackage = 'com.gauntface.push.dedupe';
+          var fallbackUrl = encodeURIComponent(
+            window.location.origin +
+            window.location.pathname +
+            '?dedupeCheck=true'
+          );
+          var appIntent = `intent:#Intent;package=${appPackage};` +
+              `S.browser_fallback_url=${fallbackUrl};` +
+              `type=text/plain;S.com.gauntface.push.` +
+              `dedupe.intent.extra.WEB_PUSH_ID` +
+              `=${internalId};end`;
+
+          // This is blocked by Chrome
+          // window.location = appIntent;
+
+          intenLink.style.display = 'inline-block';
+          intenLink.href = appIntent;
+        } else {
+          intenLink.style.display = 'none';
+        }
       } else {
         intenLink.style.display = 'none';
       }
 
-
-      curlCommand = produceGCMProprietaryCURLCommand();
-    } else {
-      intenLink.style.display = 'none';
-      curlCommand = produceWebPushProtocolCURLCommand();
-    }
-
-    var curlCodeElement = document.querySelector('.js-curl-code');
-    curlCodeElement.innerHTML = curlCommand;
-
-    // Code to handle the XHR
-    var sendPushViaXHRButton = document.querySelector('.js-send-push-button');
-    sendPushViaXHRButton.addEventListener('click', function(e) {
-      var headers = new Headers();
-      headers.append('Content-Type', 'application/json');
-
-      fetch(PUSH_SERVER_URL + '/send_web_push', {
-        method: 'post',
-        headers: headers,
-        body: JSON.stringify(subscription)
-      }).then(function(response) {
-        return response.json();
-      })
-      .then((responseObj) => {
-        if (!responseObj.success) {
-          throw new Error('Unsuccessful attempt to send push message');
-        }
-      })
-      .catch(function(err) {
-        console.log('Fetch Error :-S', err);
-      });
+      sendPushOptions.style.opacity = 1;
     });
-
-    // Display the UI
-    sendPushOptions.style.opacity = 1;
   };
 
   var pushClient = new PushClient(

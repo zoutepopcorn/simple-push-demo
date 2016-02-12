@@ -2,22 +2,18 @@
 
 /* eslint-disable dot-notation */
 
-var request = require('request-promise');
-var express = require('express');
-var bodyParser = require('body-parser');
-var EncryptionHelper = require('./encryption-helper');
 var urlBase64 = require('urlsafe-base64');
+var Firebase = require('firebase');
+var fetch = require('node-fetch');
 
-const GCM_USE_WEB_PUSH = true;
+var EncryptionHelper = require('./encryption-helper');
+var serverController = require('./server');
+require('./dedupe-controller');
+
+const GCM_USE_WEB_PUSH = false;
 const GCM_ENDPOINT = 'https://android.googleapis.com/gcm/send';
 const GCM_WEB_PUSH_ENDPOINT = 'https://jmt17.google.com/gcm/demo-webpush-00';
 const GCM_AUTHORIZATION = 'AIzaSyBBh4ddPa96rQQNxqiq_qQj7sq1JdsNQUQ';
-
-var app = express();
-app.use(bodyParser.urlencoded({extended: true}));
-app.use(bodyParser.json());
-
-app.use('/', express.static('./dist'));
 
 function handleGCMAPI(endpoint, encryptionHelper, encryptedDataBuffer) {
   var options = {
@@ -44,14 +40,19 @@ function handleGCMAPI(endpoint, encryptionHelper, encryptedDataBuffer) {
       encryptionHelper, encryptedDataBuffer);
   }
 
+  var body = {
+    'to': gcmRegistrationId
+  };
+
+  if (encryptedDataBuffer) {
+    body['raw_data'] = encryptedDataBuffer.toString('base64');
+  }
+
   // The registration ID cannot be included on the end of the GCM endpoint
   options.uri = GCM_ENDPOINT;
   options.headers['Content-Type'] = 'application/json';
   options.headers['Authorization'] = 'key=' + GCM_AUTHORIZATION;
-  options.body = JSON.stringify({
-    'to': gcmRegistrationId,
-    'raw_data': encryptedDataBuffer.toString('base64')
-  });
+  options.body = JSON.stringify(body);
 
   return request(options);
 }
@@ -101,39 +102,151 @@ function sendPushMessage(endpoint, keys) {
   return handleWebPushAPI(endpoint, encryptionHelper, encryptedDataBuffer);
 }
 
-/**
- *
- * Massive h/t to Martin Thompson for his web-push-client code
- * https://github.com/martinthomson/webpush-client/
- *
- */
-app.post('/send_web_push', function(req, res) {
+serverController.expressApp.post('/register_web_push', function(req, res) {
   var endpoint = req.body.endpoint;
-  var keys = req.body.keys;
+  // var keys = req.body.keys;
   if (!endpoint) {
     // If there is no endpoint we can't send anything
     return res.status(404).json({success: false});
   }
 
-  sendPushMessage(endpoint, keys)
-  .then((responseText) => {
-    console.log('Request success', responseText);
-    // Check the response from GCM
+  var firebaseToken = endpoint.replace(/:|\/|\.|#|\[|\]|\$/g, '');
 
-    res.json({success: true});
-  })
-  .catch((err) => {
-    console.log('Problem with request', err);
-    res.json({success: false});
+  var myFirebaseRef = new Firebase('https://dedupe.firebaseio.com/');
+  var tokenRef = myFirebaseRef.child('web').child(firebaseToken);
+
+  // TODO: Filter req.body
+  tokenRef.child('details').set(req.body);
+  tokenRef.child('paired').set(false);
+
+  res.json({
+    success: true,
+    internalId: firebaseToken
   });
 });
 
-var server = app.listen(3000, () => {
-  var port = server.address().port;
-  console.log('Server is listening at http://localhost:%s', port);
-});
+function sendPureAndroidNotifications(myFirebaseRef) {
+  return new Promise(function(resolve, reject) {
+    var androidChildRef = myFirebaseRef.child('android');
+    androidChildRef.once('value', function(dataSnapshot) {
+      if (!dataSnapshot.exists()) {
+        return;
+      }
 
-// Maybe prime256v1
-// Maybe secp256k1
-// var serverKeys = crypto.diffieHellman.generateKeys('binary');
-// console.log(crypto.getCurves());
+      var promises = [];
+      try {
+        var gcmIds = Object.keys(dataSnapshot.val());
+        for (var i = 0; i < gcmIds.length; i++) {
+          var gcmId = gcmIds[i];
+          promises.push(
+            fetch('https://android.googleapis.com/gcm/send', {
+              method: 'post',
+              headers: {
+                'Authorization': 'key=' + GCM_AUTHORIZATION,
+                'Content-type': 'application/json'
+              },
+              body: JSON.stringify({
+                to: gcmId
+              })
+            })
+            .then(function(response) {
+              return response.json();
+            })
+            .then(function(response) {
+              if (response.failure != 0) {
+                console.log(response);
+                console.log('Maybe remove from firebase?');
+                console.log('');
+              }
+            })
+            .catch(function(err) {
+              console.log(err);
+            })
+          );
+        }
+      } catch (err) {
+        console.log('sendPureAndroidNotifications()', err);
+      }
+
+      Promise.all(promises)
+      .then(resolve, reject);
+    });
+  });
+}
+
+function sendWebNotifications(myFirebaseRef) {
+  return new Promise(function(resolve, reject) {
+    var duplicationsRef = myFirebaseRef.child('duplications');
+    var webChildRef = myFirebaseRef.child('web');
+    webChildRef.once('value', function(dataSnapshot) {
+      if (!dataSnapshot.exists()) {
+        console.log('No Web Data');
+        return;
+      }
+
+      var promises = [];
+      try {
+        var webData = dataSnapshot.val();
+        var webIds = Object.keys(webData);
+        for (var i = 0; i < webIds.length; i++) {
+          var webId = webIds[i];
+
+          promises.push(new Promise(function(resolve, reject) {
+            duplicationsRef.child(webId).once('value', function(snapshot) {
+              if (snapshot.exists()) {
+                // There is a duplication - do nothing
+                resolve();
+                return;
+              }
+
+              var webSubscription = webData[webId].details;
+              var endpoint = webSubscription.endpoint;
+
+              var parts = endpoint.split('/');
+              var gcmId = parts[parts.length - 1];
+
+              fetch(GCM_ENDPOINT, {
+                method: 'post',
+                headers: {
+                  'Authorization': 'key=' + GCM_AUTHORIZATION,
+                  'Content-type': 'application/json'
+                },
+                body: JSON.stringify({
+                  to: gcmId
+                })
+              })
+              .then(function(response) {
+                return response.text();
+              })
+              .then(function(response) {
+                console.log(response);
+                console.log('');
+                resolve();
+              })
+              .catch(function(err) {
+                console.log(err);
+                reject();
+              });
+            });
+          }));
+        }
+      } catch (err) {
+        console.log('sendPureAndroidNotifications()', err);
+      }
+
+      Promise.all(promises)
+      .then(resolve, reject);
+    });
+  });
+}
+
+serverController.expressApp.post('/admin_trigger_push', function(req, res) {
+  var myFirebaseRef = new Firebase('https://dedupe.firebaseio.com/');
+
+  sendPureAndroidNotifications(myFirebaseRef)
+  .then(function() {
+    return sendWebNotifications(myFirebaseRef);
+  });
+
+  res.json({success: true});
+});

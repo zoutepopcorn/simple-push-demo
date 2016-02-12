@@ -30,7 +30,8 @@ var streamify = require('gulp-streamify');
 var replace = require('gulp-replace');
 var license = require('gulp-license');
 var sourcemaps = require('gulp-sourcemaps');
-var rename = require('gulp-rename');
+var babel = require('gulp-babel');
+var rollup = require('gulp-rollup');
 
 gulp.task('scripts:watch', function() {
   gulp.watch(GLOBAL.config.src + '/**/*.js',
@@ -85,38 +86,6 @@ function compileES6Bundles(browserifyBundles, cb) {
   });
 }
 
-// This takes a source path and finds all files ending
-// with .es6.js and creates the bundles to run through browserify
-// and babelify
-function generateES6Bundles(srcPath, cb) {
-  if (!srcPath) {
-    return cb(new Error('Invalid source path given to generateES6Bundles'));
-  }
-
-  var es6Filepaths = glob.sync(srcPath + '/**/*.es6.js');
-
-  var browserifyBundles = [];
-  es6Filepaths.forEach(function(filepath) {
-    var filename = path.basename(filepath);
-    var directoryOfFile = path.dirname(filepath);
-    var relativeDirectory = path.relative(
-      srcPath,
-      directoryOfFile);
-
-    // Replace .es6.js with .js for the final output
-    var outputFilename =
-      filename.substring(0, filename.length - '.es6.js'.length) + '.js';
-
-    browserifyBundles.push({
-      srcPath: './' + filepath,
-      outputFilename: outputFilename,
-      dest: path.join(GLOBAL.config.dest, relativeDirectory)
-    });
-  });
-
-  compileES6Bundles(browserifyBundles, cb);
-}
-
 gulp.task('scripts:eslint', function() {
   return gulp.src([GLOBAL.config.src + '/**/*.js'])
 
@@ -134,33 +103,18 @@ gulp.task('scripts:eslint', function() {
 });
 
 gulp.task('scripts:es6', function(cb) {
-  generateES6Bundles(GLOBAL.config.src, cb);
-});
+  var stream = gulp.src(GLOBAL.config.src + '/**/*.js')
+    .pipe(sourcemaps.init())
+    .pipe(rollup())
+    .pipe(babel({
+      presets: ['es2015']
+    }));
 
-gulp.task('scripts:es5', function() {
-  return gulp.src([
-    '!' + GLOBAL.config.src + '/**/*.es6.js',
-    GLOBAL.config.src + '/**/*.js'
-  ])
-    .pipe(gulpif(GLOBAL.config.env !== 'prod', sourcemaps.init()))
+  if (GLOBAL.config.env === 'prod') {
+    stream = stream.pipe(uglify());
+  }
 
-    // Remove the .es5 from the end of the file name using gulp-rename
-    .pipe(rename(function(filePath) {
-      var fullExtension = '.es5.js';
-      if (filePath.basename.indexOf('.es5.js') !==
-        (filePath.length - fullExtension.length)) {
-        return;
-      }
-
-      var fileExtensionLength = '.es5'.length;
-      filePath.basename = filePath.basename.substr(
-        0, filePath.basename.length - fileExtensionLength);
-    }))
-
-    .pipe(replace(/@VERSION@/g, GLOBAL.config.version))
-    .pipe(gulpif(GLOBAL.config.env === 'prod', uglify()))
-    .pipe(license(GLOBAL.config.license, GLOBAL.config.licenseOptions))
-    .pipe(gulpif(GLOBAL.config.env !== 'prod', sourcemaps.write()))
+  return stream.pipe(sourcemaps.write('.'))
     .pipe(gulp.dest(GLOBAL.config.dest));
 });
 
@@ -179,8 +133,7 @@ gulp.task('scripts', function(cb) {
       'scripts:eslint'
     ],
     [
-      'scripts:es6',
-      'scripts:es5'
+      'scripts:es6'
     ],
     cb
   );

@@ -31,23 +31,12 @@
     </header>
 
     <main>
-      <h1>Hello.</h1>
-      <p>Welcome to this demo web app, would you like to register for push?</p>
-      <div class="push-switch-container js-push-switch-container">
-        <label class="mdl-switch mdl-js-switch mdl-js-ripple-effect js-push-toggle-switch" for="switch-2">
-          <input type="checkbox" id="switch-2" class="mdl-switch__input" disabled>
-          <span class="mdl-switch__label">Enable Push Notifications</span>
-        </label>
-      </div>
-
       <div class="content-overlap-wrapper">
-        <div class="send-push-options js-send-push-options">
-          <p class="center">
-            <a class="js-intent-button mdl-button mdl-js-button mdl-button--raised mdl-button--colored mdl-js-ripple-effect">
-              Dedupe Notifications from Native App
-            </a>
-          </p>
-        </div>
+        <p class="center">
+          <button class="xhr-button js-send-push-button mdl-button mdl-js-button mdl-button--raised mdl-button--colored mdl-js-ripple-effect">
+            Send a Push to GCM via XHR
+          </button>
+        </p>
 
         <div class="error-message-container js-error-message-container">
           <h1 class="error-title js-error-title"></h1>
@@ -57,6 +46,6 @@
     </main>
   </div>
 
-  <script src="scripts/main.js"></script>
+  <script src="scripts/admin.js"></script>
 </body>
 </html>
