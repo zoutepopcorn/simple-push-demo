@@ -1,4 +1,6 @@
-# Simple Service Worker Push Demo
+# Simpl
+
+e Service Worker Push Demo
 
 [![Build Status](https://travis-ci.org/gauntface/simple-push-demo.svg?branch=master)](https://travis-ci.org/gauntface/simple-push-demo) [![Dependency Status](https://david-dm.org/gauntface/simple-push-demo.svg)](https://david-dm.org/gauntface/simple-push-demo) [![devDependencies Status](https://david-dm.org/gauntface/simple-push-demo/dev-status.svg)](https://david-dm.org/gauntface/simple-push-demo?type=dev)
 
@@ -9,7 +11,9 @@ notifications into your web app.
 
 - [Server Side Libraries to Help Send Push Messages ](https://github.com/web-push-libs/)
 - [Blog Post on Encrypting Payload Data](https://developers.google.com/web/updates/2016/03/web-push-encryption)
-- [Blog Post on VAPID](https://developers.google.com/web/updates/2016/07/web-push-interop-wins)
+- [Blog Post on VAPID](ht
+
+tps://developers.google.com/web/updates/2016/07/web-push-interop-wins)
 - [Web Push Book](https://web-push-book.gauntface.com)
 
 ## Github Pages Demo
@@ -33,3 +37,4 @@ To try out the demo locally, clone the repo and run the following:
         gulp dev
 
 <img src="http://i.imgur.com/Y2yafBv.png" width="304px" height="366xpx" />
+https://medium.freecodecamp.org/how-to-add-push-notifications-to-a-web-app-with-firebase-528a702e13e1
